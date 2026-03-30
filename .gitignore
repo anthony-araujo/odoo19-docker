@@ -1,0 +1,22 @@
+# Archivo de contrasena de PostgreSQL - NUNCA commitear
+odoo_pg_pass
+
+# Certificados SSL
+nginx/certs/*.pem
+nginx/certs/*.crt
+nginx/certs/*.key
+
+# Logs
+logs/
+*.log
+
+# Archivos de sesion
+sessions/
+
+# Backups
+backups/*.gz
+backups/*.tar.gz
+
+# OS
+.DS_Store
+Thumbs.db

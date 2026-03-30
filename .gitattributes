@@ -1,0 +1,9 @@
+# Scripts de bash: forzar LF para que funcionen en Linux
+*.sh    text eol=lf
+
+# Resto de archivos de texto: manejo automatico
+*.yaml  text eol=lf
+*.conf  text eol=lf
+*.md    text eol=lf
+*.conf  text eol=lf
+*.gitignore text eol=lf

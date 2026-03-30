@@ -1,0 +1,113 @@
+# /opt/odoo/docker-compose.yaml
+#
+# Estructura esperada en el servidor:
+# /opt/odoo/
+# ├── addons/
+# ├── config/
+# │   └── odoo.conf
+# ├── sessions/
+# ├── nginx/
+# │   ├── nginx.conf
+# │   └── certs/
+# ├── logs/
+# ├── backups/
+# ├── docker-compose.yaml
+# └── odoo_pg_pass
+
+services:
+  web:
+    image: odoo:19
+    container_name: odoo19_web
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8069:8069"
+      - "127.0.0.1:8072:8072"
+    volumes:
+      - odoo-web-data:/var/lib/odoo
+      - ./config:/etc/odoo:ro
+      - ./addons:/mnt/extra-addons
+      - ./sessions:/var/lib/odoo/sessions
+      - ./logs:/var/log/odoo
+    environment:
+      - PASSWORD_FILE=/run/secrets/postgresql_password
+    secrets:
+      - postgresql_password
+    networks:
+      - odoo-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  db:
+    image: postgres:16
+    container_name: odoo19_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
+      - POSTGRES_USER=odoo
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - odoo-db-data:/var/lib/postgresql/data/pgdata
+    secrets:
+      - postgresql_password
+    networks:
+      - odoo-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: odoo19_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/odoo.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - web
+    networks:
+      - odoo-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  odoo-web-data:
+  odoo-db-data:
+
+networks:
+  odoo-internal:
+    driver: bridge
+    internal: false
+
+secrets:
+  postgresql_password:
+    file: odoo_pg_pass
