@@ -1,172 +1,172 @@
-# Instalacion Profesional: Odoo 19 en Ubuntu 24.04 con Docker
+# Odoo 19 en Ubuntu 24.04 con Docker
+
+Instalacion profesional con Nginx, SSL, backups automaticos y firewall.
 
 ## Estructura del proyecto
 
 ```
-/opt/odoo/
-├── addons/               # Modulos personalizados de Odoo
+/opt/odoo19-docker/          # (o la ruta donde clonaste el repo)
+├── addons/                  # Modulos personalizados de Odoo
 ├── backups/
-│   └── backup.sh         # Script de backup automatico
+│   └── backup.sh            # Script de backup automatico
 ├── config/
-│   └── odoo.conf         # Configuracion principal de Odoo
-├── logs/                 # Logs del contenedor de Odoo
+│   └── odoo.conf            # Configuracion principal de Odoo
+├── logs/                    # Logs del contenedor de Odoo
 ├── nginx/
-│   ├── certs/            # Certificados SSL (generados por Certbot)
-│   └── nginx.conf        # Configuracion del reverse proxy
+│   ├── certs/               # Certificados SSL (generados por Certbot)
+│   └── nginx.conf           # Reverse proxy
 ├── scripts/
-│   ├── 01_server_setup.sh   # Instala Docker y prepara directorios
-│   ├── 02_ssl_setup.sh      # Obtiene certificados Let's Encrypt
-│   ├── 03_firewall_setup.sh # Configura UFW
-│   ├── 04_start_services.sh # Inicia los contenedores Docker
-│   └── 05_setup_cron.sh     # Programa backups y renovacion SSL
-├── sessions/             # Sesiones HTTP de Odoo
+│   ├── 01_server_setup.sh   # Docker + contrasena de BD
+│   ├── 02_ssl_setup.sh      # Certificados Let's Encrypt
+│   ├── 03_firewall_setup.sh # UFW
+│   ├── 04_start_services.sh # Iniciar contenedores
+│   └── 05_setup_cron.sh     # Backups y renovacion SSL automatica
+├── sessions/                # Sesiones HTTP de Odoo
 ├── docker-compose.yaml
-└── odoo_pg_pass          # Contrasena de PostgreSQL (NO commitear)
+└── odoo_pg_pass             # Contrasena de PostgreSQL — NO commitear
+```
+
+> Los scripts detectan automaticamente la ruta del proyecto.
+> Funcionan desde cualquier directorio donde este clonado el repo.
+
+---
+
+## Guia de instalacion paso a paso
+
+### Prerequisito: tener el repo clonado en el servidor
+
+```bash
+cd /opt
+sudo git clone git@github.com:anthony-araujo/odoo19-docker.git
+sudo chown -R $USER:$USER /opt/odoo19-docker
+cd /opt/odoo19-docker
 ```
 
 ---
 
-## Pasos de instalacion en el servidor Ubuntu 24.04
+### Paso 0 — Editar valores obligatorios
 
-### Prerequisito: Copiar este proyecto al servidor
-
+**`config/odoo.conf`** — cambiar el master password:
 ```bash
-# Desde tu maquina local:
-scp -r ./docker usuario@IP_SERVIDOR:/opt/odoo
-
-# O clonar directamente en el servidor si esta en un repositorio
+nano config/odoo.conf
+# Cambiar: admin_passwd = CAMBIAR_ESTE_MASTER_PASSWORD
+# Por un valor seguro, ejemplo:
+# admin_passwd = $(openssl rand -base64 18)
 ```
 
-### Paso 0: Editar valores obligatorios antes de comenzar
-
-Antes de ejecutar cualquier script, editar los siguientes archivos:
-
-**`config/odoo.conf`** — cambiar el `admin_passwd`:
-```ini
-admin_passwd = TU_MASTER_PASSWORD_SEGURO
-```
-
-**`nginx/nginx.conf`** — cambiar `TU_DOMINIO.com` por el dominio real:
-```nginx
-server_name tu-dominio-real.com;
-```
-> El script `02_ssl_setup.sh` también lo reemplaza automáticamente.
+**`nginx/nginx.conf`** — el script 02 lo actualiza automaticamente con tu dominio.
 
 ---
 
-### Paso 1: Preparacion del servidor (Docker + directorios)
+### Paso 1 — Instalar Docker y generar contrasena de BD
 
 ```bash
-cd /opt/odoo
 bash scripts/01_server_setup.sh
 ```
 
-Este script:
-- Actualiza Ubuntu y instala dependencias
-- Instala Docker Engine (metodo oficial)
-- Instala Docker Compose v2
-- Crea todos los directorios necesarios
-- Genera una contrasena aleatoria segura en `odoo_pg_pass`
+Instala Docker Engine, Docker Compose v2 y genera `odoo_pg_pass` con una
+clave aleatoria segura. Si Docker ya estaba instalado lo omite.
 
-> **Nota:** Despues de ejecutarlo, cierra la sesion SSH y vuelve a entrar para que el grupo `docker` tome efecto.
+> Despues de este paso, cierra la sesion SSH y vuelve a entrar
+> (o ejecuta `newgrp docker`) para que el grupo `docker` tome efecto.
 
 ---
 
-### Paso 2: Certificados SSL
+### Paso 2 — Certificados SSL
 
-El dominio debe apuntar a la IP del servidor (registro DNS tipo A) antes de este paso.
+El dominio debe tener un registro DNS tipo A apuntando a la IP del servidor.
 
 ```bash
-bash scripts/02_ssl_setup.sh TU_DOMINIO.com
+bash scripts/02_ssl_setup.sh tu-dominio.com
 ```
 
-Este script:
-- Instala Certbot
-- Obtiene el certificado Let's Encrypt
-- Copia los certificados a `nginx/certs/`
-- Actualiza el dominio en `nginx/nginx.conf`
+Instala Certbot, obtiene el certificado Let's Encrypt, copia los `.pem`
+a `nginx/certs/` y actualiza el dominio en `nginx/nginx.conf`.
 
 ---
 
-### Paso 3: Firewall
+### Paso 3 — Firewall
 
 ```bash
 bash scripts/03_firewall_setup.sh
 ```
 
-Resultado: solo los puertos 22 (SSH), 80 (HTTP) y 443 (HTTPS) quedan abiertos. Los puertos 8069 y 8072 de Odoo solo son accesibles internamente por Nginx.
+Abre solo los puertos **22 (SSH)**, **80 (HTTP)** y **443 (HTTPS)**.
+Los puertos 8069 y 8072 de Odoo quedan cerrados al exterior.
 
 ---
 
-### Paso 4: Iniciar los servicios
+### Paso 4 — Iniciar los servicios
 
 ```bash
 bash scripts/04_start_services.sh
 ```
 
-Este script:
-- Descarga las imagenes de Docker
-- Inicia los tres contenedores: `odoo19_db`, `odoo19_web`, `odoo19_nginx`
-- Verifica el estado y muestra los logs iniciales
+Descarga las imagenes Docker e inicia los tres contenedores:
+`odoo19_db`, `odoo19_web`, `odoo19_nginx`.
 
-Acceder a Odoo: `https://TU_DOMINIO.com`
+Accede a Odoo en `https://tu-dominio.com` y crea la primera base de datos.
 
 ---
 
-### Paso 5: Programar backups y renovacion SSL
+### Paso 5 — Programar backups y renovacion SSL
 
 ```bash
-bash scripts/05_setup_cron.sh TU_DOMINIO.com
+bash scripts/05_setup_cron.sh tu-dominio.com
 ```
 
 Configura:
-- Backup automatico diario a las 02:00 AM
-- Renovacion automatica de SSL cada 2 meses
+- Backup automatico diario a las **02:00 AM**
+- Renovacion automatica de SSL cada **2 meses**
 
 ---
 
 ## Comandos de operacion diaria
 
 ```bash
+cd /opt/odoo19-docker
+
 # Estado de los contenedores
 docker compose ps
 
-# Ver logs en tiempo real
+# Logs en tiempo real
 docker compose logs -f web
 docker compose logs -f db
 
-# Reiniciar Odoo (sin tocar la BD)
+# Reiniciar solo Odoo (sin tocar la BD)
 docker compose restart web
 
-# Detener todo
+# Detener todos los servicios
 docker compose down
 
-# Iniciar todo
+# Iniciar todos los servicios
 docker compose up -d
 
-# Actualizar imagen de Odoo (con backup previo!)
-docker compose pull && docker compose up -d
+# Backup manual
+bash backups/backup.sh
 
-# Ejecutar backup manual
-bash /opt/odoo/backups/backup.sh
+# Actualizar imagen de Odoo (hacer backup antes)
+docker compose pull web && docker compose up -d web
 ```
 
 ---
 
-## Notas de seguridad importantes
+## Notas de seguridad
 
-- El archivo `odoo_pg_pass` contiene la contrasena de la base de datos. No lo subas a ningun repositorio.
-- El `admin_passwd` en `config/odoo.conf` es la contrasena maestra de Odoo. Usa un valor aleatorio y guardalo en un gestor de contrasenas.
-- `list_db = False` en `odoo.conf` esta configurado para evitar que usuarios anonimos vean las bases de datos disponibles.
-- Los puertos 8069 y 8072 estan enlazados solo a `127.0.0.1` en `docker-compose.yaml`; no son accesibles desde Internet.
+- `odoo_pg_pass` contiene la contrasena de la BD. Nunca lo subas a un repo.
+  Esta en `.gitignore` para protegerlo.
+- `admin_passwd` en `config/odoo.conf` es la contrasena maestra de Odoo.
+  Guardala en un gestor de contrasenas.
+- `list_db = False` en `odoo.conf` oculta el listado de bases de datos.
+- Los puertos 8069 y 8072 solo escuchan en `127.0.0.1`, no al exterior.
 
 ---
 
 ## Requisitos minimos del servidor
 
-| Recurso | Minimo | Recomendado |
-|---------|--------|-------------|
-| CPU     | 2 vCPU | 4 vCPU      |
-| RAM     | 4 GB   | 8 GB        |
-| Disco   | 40 GB  | 100 GB SSD  |
+| Recurso | Minimo   | Recomendado |
+|---------|----------|-------------|
+| CPU     | 2 vCPU   | 4 vCPU      |
+| RAM     | 4 GB     | 8 GB        |
+| Disco   | 40 GB    | 100 GB SSD  |
 | SO      | Ubuntu 24.04 LTS | Ubuntu 24.04 LTS |
