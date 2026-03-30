@@ -1,123 +1,79 @@
-# Odoo 19 en Ubuntu 24.04 con Docker
+# Odoo 19 — Ubuntu 24.04 con Docker
 
-Instalacion profesional con Nginx, SSL, backups automaticos y firewall.
+Instalacion profesional con Nginx, SSL opcional, backups automaticos y firewall.
 
-## Estructura del proyecto
-
-```
-/opt/odoo19-docker/          # (o la ruta donde clonaste el repo)
-├── addons/                  # Modulos personalizados de Odoo
-├── backups/
-│   └── backup.sh            # Script de backup automatico
-├── config/
-│   └── odoo.conf            # Configuracion principal de Odoo
-├── logs/                    # Logs del contenedor de Odoo
-├── nginx/
-│   ├── certs/               # Certificados SSL (generados por Certbot)
-│   └── nginx.conf           # Reverse proxy
-├── scripts/
-│   ├── 01_server_setup.sh   # Docker + contrasena de BD
-│   ├── 02_ssl_setup.sh      # Certificados Let's Encrypt
-│   ├── 03_firewall_setup.sh # UFW
-│   ├── 04_start_services.sh # Iniciar contenedores
-│   └── 05_setup_cron.sh     # Backups y renovacion SSL automatica
-├── sessions/                # Sesiones HTTP de Odoo
-├── docker-compose.yaml
-└── odoo_pg_pass             # Contrasena de PostgreSQL — NO commitear
-```
-
-> Los scripts detectan automaticamente la ruta del proyecto.
-> Funcionan desde cualquier directorio donde este clonado el repo.
-
----
-
-## Guia de instalacion paso a paso
-
-### Prerequisito: tener el repo clonado en el servidor
+## Inicio rapido
 
 ```bash
+# 1. Clonar el repositorio en el servidor
 cd /opt
 sudo git clone git@github.com:anthony-araujo/odoo19-docker.git
 sudo chown -R $USER:$USER /opt/odoo19-docker
 cd /opt/odoo19-docker
-```
 
----
-
-### Paso 0 — Editar valores obligatorios
-
-**`config/odoo.conf`** — cambiar el master password:
-```bash
+# 2. Editar el master password de Odoo (OBLIGATORIO)
 nano config/odoo.conf
 # Cambiar: admin_passwd = CAMBIAR_ESTE_MASTER_PASSWORD
-# Por un valor seguro, ejemplo:
-# admin_passwd = $(openssl rand -base64 18)
+
+# 3. Ejecutar el instalador
+bash install.sh
 ```
 
-**`nginx/nginx.conf`** — el script 02 lo actualiza automaticamente con tu dominio.
+El instalador pregunta si tienes dominio. Responde y se configura todo automaticamente.
 
 ---
 
-### Paso 1 — Instalar Docker y generar contrasena de BD
+## Opciones del instalador
 
 ```bash
-bash scripts/01_server_setup.sh
+# Modo interactivo (pregunta dominio, email, etc.)
+bash install.sh
+
+# Con dominio desde el inicio (HTTPS automatico)
+bash install.sh --domain erp.miempresa.com --email admin@miempresa.com
+
+# Sin dominio (HTTP, para pruebas por IP)
+bash install.sh --no-domain
 ```
-
-Instala Docker Engine, Docker Compose v2 y genera `odoo_pg_pass` con una
-clave aleatoria segura. Si Docker ya estaba instalado lo omite.
-
-> Despues de este paso, cierra la sesion SSH y vuelve a entrar
-> (o ejecuta `newgrp docker`) para que el grupo `docker` tome efecto.
 
 ---
 
-### Paso 2 — Certificados SSL
+## Agregar dominio y SSL a una instalacion existente
 
-El dominio debe tener un registro DNS tipo A apuntando a la IP del servidor.
+Si instalaste en modo `--no-domain` y ya tienes el dominio apuntando al servidor:
 
 ```bash
-bash scripts/02_ssl_setup.sh tu-dominio.com
+bash scripts/add_domain.sh erp.miempresa.com admin@miempresa.com
 ```
-
-Instala Certbot, obtiene el certificado Let's Encrypt, copia los `.pem`
-a `nginx/certs/` y actualiza el dominio en `nginx/nginx.conf`.
 
 ---
 
-### Paso 3 — Firewall
+## Estructura del proyecto
 
-```bash
-bash scripts/03_firewall_setup.sh
 ```
-
-Abre solo los puertos **22 (SSH)**, **80 (HTTP)** y **443 (HTTPS)**.
-Los puertos 8069 y 8072 de Odoo quedan cerrados al exterior.
-
----
-
-### Paso 4 — Iniciar los servicios
-
-```bash
-bash scripts/04_start_services.sh
+/opt/odoo19-docker/
+├── install.sh               # Instalador principal — ejecutar esto
+├── docker-compose.yaml      # Definicion de servicios Docker
+├── odoo_pg_pass             # Contrasena BD (generada automaticamente, NO commitear)
+├── addons/                  # Modulos personalizados de Odoo
+├── backups/
+│   └── backup.sh            # Script de backup automatico
+├── config/
+│   └── odoo.conf            # Configuracion de Odoo
+├── logs/                    # Logs del contenedor
+├── nginx/
+│   ├── certs/               # Certificados SSL (generados por Certbot)
+│   └── nginx.conf           # Generado por install.sh segun modo HTTP/HTTPS
+├── scripts/
+│   ├── 01_server_setup.sh   # Solo Docker + contrasena (paso individual)
+│   ├── 02_ssl_setup.sh      # Solo SSL (paso individual)
+│   ├── 03_firewall_setup.sh # Solo UFW (paso individual)
+│   ├── 04_start_services.sh # Solo iniciar Docker (paso individual)
+│   ├── 05_setup_cron.sh     # Solo cron (paso individual)
+│   ├── add_domain.sh        # Agregar dominio a instalacion existente
+│   └── status.sh            # Ver estado completo del sistema
+└── sessions/                # Sesiones HTTP de Odoo
 ```
-
-Descarga las imagenes Docker e inicia los tres contenedores:
-`odoo19_db`, `odoo19_web`, `odoo19_nginx`.
-
-Accede a Odoo en `https://tu-dominio.com` y crea la primera base de datos.
-
----
-
-### Paso 5 — Programar backups y renovacion SSL
-
-```bash
-bash scripts/05_setup_cron.sh tu-dominio.com
-```
-
-Configura:
-- Backup automatico diario a las **02:00 AM**
-- Renovacion automatica de SSL cada **2 meses**
 
 ---
 
@@ -126,47 +82,83 @@ Configura:
 ```bash
 cd /opt/odoo19-docker
 
-# Estado de los contenedores
-docker compose ps
+# Estado completo del sistema
+bash scripts/status.sh
 
 # Logs en tiempo real
 docker compose logs -f web
 docker compose logs -f db
+docker compose logs -f nginx
+
+# Estado de contenedores
+docker compose ps
 
 # Reiniciar solo Odoo (sin tocar la BD)
 docker compose restart web
 
-# Detener todos los servicios
+# Detener todo
 docker compose down
 
-# Iniciar todos los servicios
+# Iniciar todo
 docker compose up -d
+
+# Reiniciar limpio (BORRA DATOS — solo si es instalacion nueva)
+bash scripts/04_start_services.sh --clean
 
 # Backup manual
 bash backups/backup.sh
-
-# Actualizar imagen de Odoo (hacer backup antes)
-docker compose pull web && docker compose up -d web
 ```
 
 ---
 
 ## Notas de seguridad
 
-- `odoo_pg_pass` contiene la contrasena de la BD. Nunca lo subas a un repo.
-  Esta en `.gitignore` para protegerlo.
-- `admin_passwd` en `config/odoo.conf` es la contrasena maestra de Odoo.
-  Guardala en un gestor de contrasenas.
-- `list_db = False` en `odoo.conf` oculta el listado de bases de datos.
-- Los puertos 8069 y 8072 solo escuchan en `127.0.0.1`, no al exterior.
+| Archivo | Detalle |
+|---|---|
+| `odoo_pg_pass` | Contrasena de PostgreSQL. Permisos `644`, generada con `openssl rand -hex 24`. Esta en `.gitignore`. |
+| `config/odoo.conf` `admin_passwd` | Master password de Odoo. Cambiarlo ANTES del primer inicio. |
+| `list_db = False` | Oculta el listado de bases de datos en produccion. |
+| Puertos 8069/8072 | Solo en `127.0.0.1`. No accesibles desde Internet, solo via Nginx. |
 
 ---
 
-## Requisitos minimos del servidor
+## Requisitos del servidor
 
-| Recurso | Minimo   | Recomendado |
-|---------|----------|-------------|
-| CPU     | 2 vCPU   | 4 vCPU      |
-| RAM     | 4 GB     | 8 GB        |
-| Disco   | 40 GB    | 100 GB SSD  |
+| Recurso | Minimo (pruebas) | Produccion |
+|---------|-----------------|------------|
+| CPU     | 2 vCPU          | 4+ vCPU    |
+| RAM     | 2 GB            | 8+ GB      |
+| Disco   | 30 GB SSD       | 100+ GB SSD|
 | SO      | Ubuntu 24.04 LTS | Ubuntu 24.04 LTS |
+
+> Con 2 GB RAM el instalador configura `workers = 2`. Aumentar a 4+ con 8 GB RAM
+> editando `config/odoo.conf` y reiniciando: `docker compose restart web`
+
+---
+
+## Problemas comunes
+
+**`Permission denied` en `/run/secrets/postgresql_password`**
+```bash
+chmod 644 odoo_pg_pass
+docker compose restart web
+```
+
+**`password authentication failed for user "odoo"`**
+```bash
+# El volumen de Postgres tiene una contrasena diferente. Reiniciar limpio:
+docker compose down -v
+docker compose up -d
+```
+
+**Nginx muestra "Welcome to nginx!" en vez de Odoo**
+```bash
+docker exec odoo19_nginx rm -f /etc/nginx/conf.d/default.conf
+docker exec odoo19_nginx nginx -s reload
+```
+
+**502 Bad Gateway**
+```bash
+# Odoo puede estar arrancando. Esperar 60s y revisar logs:
+docker compose logs --tail=30 web
+```

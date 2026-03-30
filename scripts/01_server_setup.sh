@@ -1,55 +1,58 @@
 #!/usr/bin/env bash
 # =============================================================================
-# FASE 1: Preparacion del servidor Ubuntu 24.04
-# Ejecutar como usuario con sudo (NO como root)
+# 01_server_setup.sh — Instalar Docker y generar contrasena de BD
 # Uso: bash scripts/01_server_setup.sh
+# Nota: Este script es llamado automaticamente por install.sh
 # =============================================================================
 set -euo pipefail
 
-# Detectar la raiz del proyecto automaticamente (un nivel arriba de scripts/)
 ODOO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; NC='\033[0m'
+log()   { echo -e "${G}[OK]${NC} $*"; }
+warn()  { echo -e "${Y}[!!]${NC} $*"; }
+error() { echo -e "${R}[ERROR]${NC} $*" >&2; exit 1; }
+
 echo "Directorio del proyecto: $ODOO_DIR"
 
-echo "=== [1/4] Actualizando el sistema ==="
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y curl wget git ufw fail2ban
+echo "=== [1/3] Actualizando sistema e instalando dependencias ==="
+sudo apt-get update -qq
+sudo apt-get install -y -qq curl wget git ufw fail2ban ca-certificates gnupg
+log "Dependencias instaladas"
 
-echo "=== [2/4] Instalando Docker Engine ==="
+echo "=== [2/3] Instalando Docker Engine ==="
 if ! command -v docker &>/dev/null; then
     curl -fsSL https://get.docker.com | sudo sh
     sudo usermod -aG docker "$USER"
-    echo ""
-    echo "IMPORTANTE: Docker instalado. Cierra la sesion SSH y vuelve a entrar"
-    echo "para que el grupo 'docker' tome efecto, luego continua con 02_ssl_setup.sh"
-    echo "O ejecuta ahora: newgrp docker"
+    log "Docker instalado: $(docker --version)"
+    warn "Cierra la sesion SSH y vuelve a entrar (o ejecuta: newgrp docker)"
 else
-    echo "Docker ya instalado: $(docker --version)"
+    log "Docker ya instalado: $(docker --version)"
 fi
 
-echo "=== [3/4] Instalando Docker Compose v2 ==="
 if ! docker compose version &>/dev/null 2>&1; then
-    sudo apt install -y docker-compose-plugin
+    sudo apt-get install -y -qq docker-compose-plugin
 fi
-docker compose version
+log "Docker Compose: $(docker compose version --short)"
 
-echo "=== [4/4] Verificando/creando directorios y contrasena ==="
-# Crear directorios faltantes (si el repo fue clonado ya existen la mayoria)
+echo "=== [3/3] Generando contrasena segura ==="
 mkdir -p "$ODOO_DIR"/{addons,config,sessions,nginx/certs,logs,backups}
 
 PASS_FILE="$ODOO_DIR/odoo_pg_pass"
 CURRENT_PASS=""
-[ -f "$PASS_FILE" ] && CURRENT_PASS=$(cat "$PASS_FILE" | tr -d '[:space:]')
+[[ -f "$PASS_FILE" ]] && CURRENT_PASS=$(tr -d '[:space:]' < "$PASS_FILE")
 
-if [ ! -f "$PASS_FILE" ] || [ "$CURRENT_PASS" = "CAMBIAR_POR_PASSWORD_SEGURO" ] || [ -z "$CURRENT_PASS" ]; then
-    openssl rand -base64 32 | tr -d '/+=' > "$PASS_FILE"
-    chmod 644 "$PASS_FILE"
-    echo "Contrasena generada en: $PASS_FILE"
-    echo "Valor: $(cat $PASS_FILE)"
+if [[ ! -f "$PASS_FILE" ]] || [[ -z "$CURRENT_PASS" ]] || [[ "$CURRENT_PASS" == "CAMBIAR_POR_PASSWORD_SEGURO" ]]; then
+    openssl rand -hex 24 > "$PASS_FILE"
+    log "Contrasena generada: $PASS_FILE"
 else
-    echo "Archivo de contrasena ya existe con valor seguro: $PASS_FILE"
+    log "Contrasena existente conservada: $PASS_FILE"
 fi
 
+# IMPORTANTE: 644 es requerido para que Docker secrets pueda leerlo
+chmod 644 "$PASS_FILE"
+log "Permisos de odoo_pg_pass: 644"
+
 echo ""
-echo "=== FASE 1 COMPLETADA ==="
-echo "Siguiente paso:"
-echo "  bash $ODOO_DIR/scripts/02_ssl_setup.sh TU_DOMINIO.com"
+log "=== FASE 1 COMPLETADA ==="
+echo "Siguiente: bash install.sh --domain TU_DOMINIO.com"
+echo "       o : bash install.sh --no-domain"
