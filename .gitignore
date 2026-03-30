@@ -1,5 +1,6 @@
-# Archivo de contrasena de PostgreSQL - NUNCA commitear
+# Archivos con credenciales - NUNCA commitear
 odoo_pg_pass
+.env
 
 # Certificados SSL
 nginx/certs/*.pem

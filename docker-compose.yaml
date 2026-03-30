@@ -1,18 +1,10 @@
-# /opt/odoo/docker-compose.yaml
+# /opt/odoo19-docker/docker-compose.yaml
 #
-# Estructura esperada en el servidor:
-# /opt/odoo/
-# ├── addons/
-# ├── config/
-# │   └── odoo.conf
-# ├── sessions/
-# ├── nginx/
-# │   ├── nginx.conf
-# │   └── certs/
-# ├── logs/
-# ├── backups/
-# ├── docker-compose.yaml
-# └── odoo_pg_pass
+# La contrasena de BD se lee desde el archivo .env (generado por install.sh)
+# El archivo .env NO se sube al repositorio (.gitignore)
+#
+# Para generar .env manualmente:
+#   echo "ODOO_DB_PASSWORD=$(openssl rand -hex 24)" > .env
 
 services:
   web:
@@ -32,9 +24,9 @@ services:
       - ./sessions:/var/lib/odoo/sessions
       - ./logs:/var/log/odoo
     environment:
-      - PASSWORD_FILE=/run/secrets/postgresql_password
-    secrets:
-      - postgresql_password
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=${ODOO_DB_PASSWORD}
     networks:
       - odoo-internal
     deploy:
@@ -54,13 +46,11 @@ services:
     restart: unless-stopped
     environment:
       - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
       - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=${ODOO_DB_PASSWORD}
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - odoo-db-data:/var/lib/postgresql/data/pgdata
-    secrets:
-      - postgresql_password
     networks:
       - odoo-internal
     healthcheck:
@@ -106,8 +96,3 @@ volumes:
 networks:
   odoo-internal:
     driver: bridge
-    internal: false
-
-secrets:
-  postgresql_password:
-    file: odoo_pg_pass

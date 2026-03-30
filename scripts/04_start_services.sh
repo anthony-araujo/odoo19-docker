@@ -17,13 +17,18 @@ error() { echo -e "${R}[ERROR]${NC} $*" >&2; exit 1; }
 
 cd "$ODOO_DIR"
 
-# Verificar contrasena
+# Verificar contrasena y .env
 PASS_FILE="$ODOO_DIR/odoo_pg_pass"
+ENV_FILE="$ODOO_DIR/.env"
 [[ ! -f "$PASS_FILE" ]] && error "No se encontro $PASS_FILE. Ejecuta primero: bash scripts/01_server_setup.sh"
 PASS=$(tr -d '[:space:]' < "$PASS_FILE")
 [[ "$PASS" == "CAMBIAR_POR_PASSWORD_SEGURO" ]] && error "La contrasena es el placeholder. Ejecuta: bash scripts/01_server_setup.sh"
 [[ -z "$PASS" ]] && error "El archivo odoo_pg_pass esta vacio."
-chmod 644 "$PASS_FILE"
+
+# Regenerar .env siempre antes de iniciar (evita el bug de cache de Docker secrets)
+echo "ODOO_DB_PASSWORD=${PASS}" > "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+log "Archivo .env actualizado"
 
 echo "=== [1/3] Deteniendo servicios ==="
 if [[ "$CLEAN" == "true" ]]; then

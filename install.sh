@@ -101,21 +101,23 @@ section "FASE 2 — Contrasena de base de datos y directorios"
 mkdir -p "$ODOO_DIR"/{addons,config,sessions,nginx/certs,nginx/templates,logs,backups,scripts}
 
 PASS_FILE="$ODOO_DIR/odoo_pg_pass"
+ENV_FILE="$ODOO_DIR/.env"
 CURRENT_PASS=""
 [[ -f "$PASS_FILE" ]] && CURRENT_PASS=$(tr -d '[:space:]' < "$PASS_FILE")
 
 # Regenerar si no existe, esta vacia o tiene el valor placeholder del repo
 if [[ ! -f "$PASS_FILE" ]] || [[ -z "$CURRENT_PASS" ]] || [[ "$CURRENT_PASS" == "CAMBIAR_POR_PASSWORD_SEGURO" ]]; then
-    # Solo hexadecimal: sin /, + ni = que causan problemas en algunos contextos
     openssl rand -hex 24 > "$PASS_FILE"
+    CURRENT_PASS=$(tr -d '[:space:]' < "$PASS_FILE")
     log "Contrasena generada en: $PASS_FILE"
 else
-    log "Contrasena existente conservada en: $PASS_FILE"
+    log "Contrasena existente conservada: $PASS_FILE"
 fi
 
-# Permisos: legible por el proceso de Docker (secret mount)
-chmod 644 "$PASS_FILE"
-log "Permisos de odoo_pg_pass: 644 (requerido para Docker secrets)"
+# Generar .env que usa docker-compose.yaml (sin Docker secrets, sin cache)
+echo "ODOO_DB_PASSWORD=${CURRENT_PASS}" > "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+log "Archivo .env generado con ODOO_DB_PASSWORD"
 
 # =============================================================================
 # FASE 3: Configuracion de Nginx
