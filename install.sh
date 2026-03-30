@@ -278,11 +278,11 @@ section "FASE 6 — Iniciando servicios Docker"
 
 cd "$ODOO_DIR"
 
-# Limpiar cualquier estado anterior para garantizar inicio limpio
-if docker compose ps -q 2>/dev/null | grep -q .; then
-    warn "Detectados contenedores existentes. Deteniendo y eliminando volumenes..."
-    docker compose down -v
-fi
+# Siempre limpiar estado anterior para garantizar inicio limpio
+# (contenedores corriendo O volumenes huerfanos con contrasena vieja)
+log "Limpiando estado anterior (contenedores y volumenes)..."
+docker compose down 2>/dev/null || true
+docker volume ls -q | grep "^${PWD##*/}_" | xargs -r docker volume rm 2>/dev/null || true
 
 log "Descargando imagenes..."
 docker compose pull --quiet
