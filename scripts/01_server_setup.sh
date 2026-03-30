@@ -37,12 +37,16 @@ echo "=== [4/4] Verificando/creando directorios y contrasena ==="
 mkdir -p "$ODOO_DIR"/{addons,config,sessions,nginx/certs,logs,backups}
 
 PASS_FILE="$ODOO_DIR/odoo_pg_pass"
-if [ ! -f "$PASS_FILE" ]; then
-    openssl rand -base64 32 | tr -d '=' > "$PASS_FILE"
-    chmod 600 "$PASS_FILE"
+CURRENT_PASS=""
+[ -f "$PASS_FILE" ] && CURRENT_PASS=$(cat "$PASS_FILE" | tr -d '[:space:]')
+
+if [ ! -f "$PASS_FILE" ] || [ "$CURRENT_PASS" = "CAMBIAR_POR_PASSWORD_SEGURO" ] || [ -z "$CURRENT_PASS" ]; then
+    openssl rand -base64 32 | tr -d '/+=' > "$PASS_FILE"
+    chmod 644 "$PASS_FILE"
     echo "Contrasena generada en: $PASS_FILE"
+    echo "Valor: $(cat $PASS_FILE)"
 else
-    echo "Archivo de contrasena ya existe: $PASS_FILE"
+    echo "Archivo de contrasena ya existe con valor seguro: $PASS_FILE"
 fi
 
 echo ""
